@@ -1,0 +1,113 @@
+import React, { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
+import axios from "axios";
+import { initializeApp } from "firebase/app";
+import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { getFirestore, collection, addDoc, getDocs } from "firebase/firestore";
+
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const provider = new GoogleAuthProvider();
+
+export default function StockDashboard() {
+  const [ticker, setTicker] = useState("");
+  const [data, setData] = useState(null);
+  const [watchlist, setWatchlist] = useState([]);
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    if (user) {
+      fetchWatchlist();
+    }
+  }, [user]);
+
+  const fetchStockData = async () => {
+    if (!ticker) return;
+    try {
+      const response = await axios.get(
+        `https://your-backend-api.com/analyze?ticker=${ticker}`
+      );
+      setData(response.data);
+    } catch (error) {
+      console.error("Error fetching stock data:", error);
+    }
+  };
+
+  const addToWatchlist = async () => {
+    if (ticker && !watchlist.includes(ticker) && user) {
+      setWatchlist([...watchlist, ticker]);
+      await addDoc(collection(db, "watchlists"), {
+        userId: user.uid,
+        ticker: ticker
+      });
+    }
+  };
+
+  const fetchWatchlist = async () => {
+    if (!user) return;
+    const querySnapshot = await getDocs(collection(db, "watchlists"));
+    const stocks = querySnapshot.docs
+      .filter(doc => doc.data().userId === user.uid)
+      .map(doc => doc.data().ticker);
+    setWatchlist(stocks);
+  };
+
+  const signIn = async () => {
+    try {
+      const result = await signInWithPopup(auth, provider);
+      setUser(result.user);
+    } catch (error) {
+      console.error("Authentication Error:", error);
+    }
+  };
+
+  return (
+    <div className="p-4 max-w-3xl mx-auto">
+      <h1 className="text-xl font-bold mb-4">Stock Valuation Dashboard</h1>
+      {!user ? (
+        <Button onClick={signIn}>Sign in with Google</Button>
+      ) : (
+        <p>Welcome, {user.displayName}</p>
+      )}
+      <div className="flex space-x-2 mb-4">
+        <Input
+          value={ticker}
+          onChange={(e) => setTicker(e.target.value.toUpperCase())}
+          placeholder="Enter stock ticker (e.g., AAPL)"
+        />
+        <Button onClick={fetchStockData}>Analyze</Button>
+        <Button onClick={addToWatchlist} variant="outline">
+          Add to Watchlist
+        </Button>
+      </div>
+      {data && (
+        <Card className="mb-4">
+          <CardContent>
+            <p>DCF Valuation: ${data.dcf_value.toFixed(2)}</p>
+            <p>Risk Assessment: {data.risk.toFixed(2)}</p>
+            <p>Backtest Value: ${data.backtest_value.toFixed(2)}</p>
+            <p>Paper Trade Value: ${data.paper_trade_value.toFixed(2)}</p>
+          </CardContent>
+        </Card>
+      )}
+      <h2 className="text-lg font-bold mt-4">Watchlist</h2>
+      <ul>
+        {watchlist.map((stock) => (
+          <li key={stock} className="text-sm text-gray-600">{stock}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}

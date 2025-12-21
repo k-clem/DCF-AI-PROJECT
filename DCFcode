@@ -1,113 +1,87 @@
-import React, { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import axios from "axios";
-import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore, collection, addDoc, getDocs } from "firebase/firestore";
+/*
+FULL SINGLE‑PAGE FIREBASE APP (Frontend + Backend)
+Paste this entire file into /functions/index.js
+Then deploy with Firebase Functions + Hosting
+*/
 
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
+// ================= BACKEND =================
+const functions = require("firebase-functions");
+const express = require("express");
+const cors = require("cors");
+const yahooFinance = require("yahoo-finance2").default;
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const provider = new GoogleAuthProvider();
+const app = express();
+app.use(cors());
 
-export default function StockDashboard() {
-  const [ticker, setTicker] = useState("");
-  const [data, setData] = useState(null);
-  const [watchlist, setWatchlist] = useState([]);
-  const [user, setUser] = useState(null);
+async function dcfValuation(ticker) {
+  const quote = await yahooFinance.quote(ticker);
+  const cashflow = await yahooFinance.cashflow(ticker);
 
-  useEffect(() => {
-    if (user) {
-      fetchWatchlist();
-    }
-  }, [user]);
+  const fcf = cashflow.cashflowStatements[0]?.freeCashFlow || 0;
+  const growth = 0.05;
+  const discount = 0.1;
+  const terminal = 0.02;
 
-  const fetchStockData = async () => {
-    if (!ticker) return;
-    try {
-      const response = await axios.get(
-        `https://your-backend-api.com/analyze?ticker=${ticker}`
-      );
-      setData(response.data);
-    } catch (error) {
-      console.error("Error fetching stock data:", error);
-    }
+  let value = 0;
+  for (let i = 1; i <= 5; i++) {
+    value += (fcf * Math.pow(1 + growth, i)) / Math.pow(1 + discount, i);
+  }
+
+  const terminalValue =
+    (fcf * Math.pow(1 + growth, 5) * (1 + terminal)) /
+    (discount - terminal);
+
+  value += terminalValue / Math.pow(1 + discount, 5);
+
+  return {
+    ticker,
+    price: quote.regularMarketPrice,
+    intrinsicValue: value
   };
-
-  const addToWatchlist = async () => {
-    if (ticker && !watchlist.includes(ticker) && user) {
-      setWatchlist([...watchlist, ticker]);
-      await addDoc(collection(db, "watchlists"), {
-        userId: user.uid,
-        ticker: ticker
-      });
-    }
-  };
-
-  const fetchWatchlist = async () => {
-    if (!user) return;
-    const querySnapshot = await getDocs(collection(db, "watchlists"));
-    const stocks = querySnapshot.docs
-      .filter(doc => doc.data().userId === user.uid)
-      .map(doc => doc.data().ticker);
-    setWatchlist(stocks);
-  };
-
-  const signIn = async () => {
-    try {
-      const result = await signInWithPopup(auth, provider);
-      setUser(result.user);
-    } catch (error) {
-      console.error("Authentication Error:", error);
-    }
-  };
-
-  return (
-    <div className="p-4 max-w-3xl mx-auto">
-      <h1 className="text-xl font-bold mb-4">Stock Valuation Dashboard</h1>
-      {!user ? (
-        <Button onClick={signIn}>Sign in with Google</Button>
-      ) : (
-        <p>Welcome, {user.displayName}</p>
-      )}
-      <div className="flex space-x-2 mb-4">
-        <Input
-          value={ticker}
-          onChange={(e) => setTicker(e.target.value.toUpperCase())}
-          placeholder="Enter stock ticker (e.g., AAPL)"
-        />
-        <Button onClick={fetchStockData}>Analyze</Button>
-        <Button onClick={addToWatchlist} variant="outline">
-          Add to Watchlist
-        </Button>
-      </div>
-      {data && (
-        <Card className="mb-4">
-          <CardContent>
-            <p>DCF Valuation: ${data.dcf_value.toFixed(2)}</p>
-            <p>Risk Assessment: {data.risk.toFixed(2)}</p>
-            <p>Backtest Value: ${data.backtest_value.toFixed(2)}</p>
-            <p>Paper Trade Value: ${data.paper_trade_value.toFixed(2)}</p>
-          </CardContent>
-        </Card>
-      )}
-      <h2 className="text-lg font-bold mt-4">Watchlist</h2>
-      <ul>
-        {watchlist.map((stock) => (
-          <li key={stock} className="text-sm text-gray-600">{stock}</li>
-        ))}
-      </ul>
-    </div>
-  );
 }
+
+app.get("/analyze", async (req, res) => {
+  try {
+    const { ticker } = req.query;
+    const result = await dcfValuation(ticker);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+exports.api = functions.https.onRequest(app);
+
+// ================= FRONTEND =================
+exports.web = functions.https.onRequest((req, res) => {
+  res.send(`<!DOCTYPE html>
+<html>
+<head>
+<title>Stock Valuation App</title>
+<style>
+body { font-family: Arial; background:#0f172a; color:white; padding:30px }
+input, button { padding:10px; font-size:16px }
+.card { background:#1e293b; padding:20px; margin-top:20px; border-radius:8px }
+</style>
+</head>
+<body>
+<h1>DCF Stock Valuation</h1>
+<input id="ticker" placeholder="AAPL" />
+<button onclick="analyze()">Analyze</button>
+<div id="result"></div>
+<script>
+async function analyze() {
+  const ticker = document.getElementById('ticker').value;
+  const res = await fetch('/api/analyze?ticker=' + ticker);
+  const data = await res.json();
+  document.getElementById('result').innerHTML = `
+    <div class="card">
+      <h3>${data.ticker}</h3>
+      <p>Market Price: $${data.price}</p>
+      <p>Intrinsic Value: $${data.intrinsicValue.toFixed(2)}</p>
+    </div>`;
+}
+</script>
+</body>
+</html>`);
+});

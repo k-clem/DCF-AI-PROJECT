@@ -9,23 +9,23 @@
   </style>
 </head>
 <body>
-  <h1>DCF Stock Valuation</h1>
-  <input id="ticker" placeholder="AAPL" />
-  <button onclick="analyze()">Analyze</button>
-  <div id="result"></div>
+<h1>DCF Stock Valuation</h1>
+<input id="ticker" placeholder="AAPL" />
+<button onclick="analyze()">Analyze</button>
+<div id="result"></div>
 
-  <script>
-    async function analyze() {
-      const ticker = document.getElementById('ticker').value;
-      const res = await fetch('/api/analyze?ticker=' + ticker);
-      const data = await res.json();
-      document.getElementById('result').innerHTML = `
-        <div class="card">
-          <h3>${data.ticker}</h3>
-          <p>Market Price: $${data.price}</p>
-          <p>Intrinsic Value: $${data.intrinsicValue.toFixed(2)}</p>
-        </div>`;
-    }
-  </script>
+<script>
+async function analyze() {
+  const ticker = document.getElementById('ticker').value;
+  const res = await fetch('/api/analyze?ticker=' + ticker);
+  const data = await res.json();
+  document.getElementById('result').innerHTML = `
+    <div class="card">
+      <h3>${data.ticker}</h3>
+      <p>Market Price: $${data.price}</p>
+      <p>Intrinsic Value: $${data.intrinsicValue.toFixed(2)}</p>
+    </div>`;
+}
+</script>
 </body>
 </html>

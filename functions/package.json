@@ -1,11 +1,9 @@
 {
   "name": "stock-app",
-  "engines": {
-    "node": "18"
-  },
+  "engines": { "node": "18" },
   "dependencies": {
-    "cors": "^2.8.5",
     "express": "^4.18.2",
+    "cors": "^2.8.5",
     "firebase-functions": "^4.4.0",
     "yahoo-finance2": "^2.3.0"
   }

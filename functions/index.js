@@ -6,12 +6,9 @@ const yahooFinance = require("yahoo-finance2").default;
 const app = express();
 app.use(cors());
 
-// Backend endpoint
-app.get("/analyze", async (req, res) => {
+app.get("/api/analyze", async (req, res) => {
   try {
     const { ticker } = req.query;
-    if (!ticker) return res.status(400).json({ error: "Missing ticker" });
-
     const quote = await yahooFinance.quote(ticker);
     const cashflow = await yahooFinance.cashflow(ticker);
     const fcf = cashflow.cashflowStatements[0]?.freeCashFlow || 0;
@@ -30,15 +27,10 @@ app.get("/analyze", async (req, res) => {
 
     value += terminalValue / Math.pow(1 + discount, 5);
 
-    res.json({
-      ticker,
-      price: quote.regularMarketPrice,
-      intrinsicValue: value,
-    });
+    res.json({ ticker, price: quote.regularMarketPrice, intrinsicValue: value });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// Export as Firebase Function
 exports.api = functions.https.onRequest(app);

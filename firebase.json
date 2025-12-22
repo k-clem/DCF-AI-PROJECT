@@ -1,5 +1,4 @@
 {
-  "functions": { "source": "functions" },
   "hosting": {
     "public": "public",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
@@ -7,5 +6,6 @@
       { "source": "/api/**", "function": "api" },
       { "source": "**", "destination": "/index.html" }
     ]
-  }
+  },
+  "functions": { "source": "functions" }
 }

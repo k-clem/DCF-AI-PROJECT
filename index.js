@@ -1,67 +1,44 @@
-/* FULL SINGLE-PAGE APP: Backend + Frontend */
-const fcf = cashflow.cashflowStatements[0]?.freeCashFlow || 0;
-const growth = 0.05;
-const discount = 0.1;
-const terminal = 0.02;
+const functions = require("firebase-functions");
+const express = require("express");
+const cors = require("cors");
+const yahooFinance = require("yahoo-finance2").default;
 
-let value = 0;
-for (let i = 1; i <= 5; i++) {
-value += (fcf * Math.pow(1 + growth, i)) / Math.pow(1 + discount, i);
-}
+const app = express();
+app.use(cors());
 
-const terminalValue =
-(fcf * Math.pow(1 + growth, 5) * (1 + terminal)) / (discount - terminal);
-
-value += terminalValue / Math.pow(1 + discount, 5);
-
-return {
-ticker,
-price: quote.regularMarketPrice,
-intrinsicValue: value
-};
-}
-
+// Backend endpoint
 app.get("/analyze", async (req, res) => {
-try {
-const { ticker } = req.query;
-const result = await dcfValuation(ticker);
-res.json(result);
-} catch (e) {
-res.status(500).json({ error: e.message });
-}
+  try {
+    const { ticker } = req.query;
+    if (!ticker) return res.status(400).json({ error: "Missing ticker" });
+
+    const quote = await yahooFinance.quote(ticker);
+    const cashflow = await yahooFinance.cashflow(ticker);
+    const fcf = cashflow.cashflowStatements[0]?.freeCashFlow || 0;
+
+    const growth = 0.05;
+    const discount = 0.1;
+    const terminal = 0.02;
+
+    let value = 0;
+    for (let i = 1; i <= 5; i++) {
+      value += (fcf * Math.pow(1 + growth, i)) / Math.pow(1 + discount, i);
+    }
+
+    const terminalValue =
+      (fcf * Math.pow(1 + growth, 5) * (1 + terminal)) / (discount - terminal);
+
+    value += terminalValue / Math.pow(1 + discount, 5);
+
+    res.json({
+      ticker,
+      price: quote.regularMarketPrice,
+      intrinsicValue: value,
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
+// Export as Firebase Function
 exports.api = functions.https.onRequest(app);
-
-exports.web = functions.https.onRequest((req, res) => {
-res.send(`<!DOCTYPE html>
-<html>
-<head>
-<title>Stock Valuation App</title>
-<style>
-body { font-family: Arial; background:#0f172a; color:white; padding:30px }
-input, button { padding:10px; font-size:16px }
-.card { background:#1e293b; padding:20px; margin-top:20px; border-radius:8px }
-</style>
-</head>
-<body>
-<h1>DCF Stock Valuation</h1>
-<input id="ticker" placeholder="AAPL" />
-<button onclick="analyze()">Analyze</button>
-<div id="result"></div>
-<script>
-async function analyze() {
-const ticker = document.getElementById('ticker').value;
-const res = await fetch('/api/analyze?ticker=' + ticker);
-const data = await res.json();
-document.getElementById('result').innerHTML = `
-<div class="card">
-<h3>${data.ticker}</h3>
-<p>Market Price: $${data.price}</p>
-<p>Intrinsic Value: $${data.intrinsicValue.toFixed(2)}</p>
-</div>`;
-}
-</script>
-</body>
-</html>`);
-});

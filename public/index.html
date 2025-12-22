@@ -1,19 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Stock Valuation App</title>
-  <style>
-    body { font-family: Arial; background:#0f172a; color:white; padding:30px }
-    input, button { padding:10px; font-size:16px }
-    .card { background:#1e293b; padding:20px; margin-top:20px; border-radius:8px }
-  </style>
+<title>Stock Valuation App</title>
+<style>
+body { font-family: Arial; background:#0f172a; color:white; padding:30px }
+input, button { padding:10px; font-size:16px }
+.card { background:#1e293b; padding:20px; margin-top:20px; border-radius:8px }
+</style>
 </head>
 <body>
 <h1>DCF Stock Valuation</h1>
 <input id="ticker" placeholder="AAPL" />
 <button onclick="analyze()">Analyze</button>
 <div id="result"></div>
-
 <script>
 async function analyze() {
   const ticker = document.getElementById('ticker').value;
@@ -23,7 +22,6 @@ async function analyze() {
     <div class="card">
       <h3>${data.ticker}</h3>
       <p>Market Price: $${data.price}</p>
-      <p>Intrinsic Value: $${data.intrinsicValue.toFixed(2)}</p>
     </div>`;
 }
 </script>

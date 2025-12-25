@@ -58,9 +58,10 @@
   <ul id="watchlist"></ul>
 </div>
 
+  
 <script>
-const cache = {};
 let chart;
+const cache = {};
 
 function getWatchlist() {
   return JSON.parse(localStorage.getItem("watchlist") || "[]");
@@ -73,7 +74,9 @@ function renderWatchlist() {
   ul.innerHTML = "";
   getWatchlist().forEach(item => {
     const li = document.createElement("li");
-    li.innerHTML = `${item.ticker} — <b class="${item.riskClass}">${item.riskScore ?? "?"}</b>`;
+    li.innerHTML = `${item.ticker} — <b class="${item.riskClass || ""}">
+      ${item.riskScore ?? "Not analyzed"}
+    </b>`;
     li.onclick = () => {
       document.getElementById("tickerInput").value = item.ticker;
       analyze();
@@ -97,58 +100,60 @@ async function analyze() {
   const ticker = document.getElementById("tickerInput").value.toUpperCase();
   if (!ticker) return;
 
-  if (cache[ticker]) {
-    render(cache[ticker]);
+  if (cache[ticker]) return render(cache[ticker]);
+
+  const url = `https://stooq.pl/q/d/l/?s=${ticker.toLowerCase()}.us&i=d`;
+  const res = await fetch(url);
+  const text = await res.text();
+
+  if (!text.includes(",")) {
+    alert("Data unavailable for this ticker.");
     return;
   }
 
-  const res = await fetch(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=6mo&interval=1d`
-  );
-  const json = await res.json();
-  const r = json.chart.result?.[0];
-  if (!r) return alert("Ticker not found");
+  const rows = text.trim().split("\n").slice(1);
+  const prices = rows.map(r => parseFloat(r.split(",")[4])).filter(Boolean);
 
-  const prices = r.indicators.quote[0].close.filter(Boolean);
-  const labels = r.timestamp.map(t => new Date(t * 1000).toLocaleDateString());
   const price = prices.at(-1);
-
-  const dcf = improvedDCF(price);
+  const dcf = deepDCF(prices);
   const risk = aiRisk(prices, price, dcf);
 
-  const payload = { ticker, price, dcf, risk, prices, labels };
+  const payload = { ticker, price, dcf, risk, prices };
   cache[ticker] = payload;
   updateWatchlistScore(ticker, risk);
   render(payload);
 }
 
-function improvedDCF(price) {
+function deepDCF(prices) {
+  const years = 10;
   const discount = 0.1;
-  const growth = 0.06;
   const terminal = 0.02;
 
-  let fcf = price * 0.18; // normalized FCF proxy
+  const returns = prices.slice(1).map((p, i) => (p - prices[i]) / prices[i]);
+  const avgReturn = avg(returns);
+  const growth = Math.min(Math.max(avgReturn, 0.03), 0.08);
+
+  let fcf = prices.at(-1) * 0.2;
   let value = 0;
 
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= years; i++) {
     fcf *= (1 + growth);
     value += fcf / Math.pow(1 + discount, i);
   }
 
   const terminalValue = (fcf * (1 + terminal)) / (discount - terminal);
-  value += terminalValue / Math.pow(1 + discount, 10);
+  value += terminalValue / Math.pow(1 + discount, years);
 
-  return Math.max(value, 0);
+  return value * 0.85; // margin of safety
 }
 
 function aiRisk(prices, price, dcf) {
   const returns = prices.slice(1).map((p, i) => (p - prices[i]) / prices[i]);
   const volatility = std(returns) * 100;
   const valuationGap = Math.abs(dcf - price) / price * 100;
-  const trendPenalty = price < avg(prices.slice(-50)) ? 20 : 5;
+  const drawdown = (Math.max(...prices) - price) / Math.max(...prices) * 100;
 
-  const score = Math.min(100, Math.round(volatility + valuationGap + trendPenalty));
-  return score;
+  return Math.min(100, Math.round(volatility + valuationGap + drawdown));
 }
 
 function updateWatchlistScore(ticker, score) {
@@ -169,7 +174,7 @@ function std(a) {
   return Math.sqrt(avg(a.map(x => (x-m)**2)));
 }
 
-function render({ ticker, price, dcf, risk, prices, labels }) {
+function render({ ticker, price, dcf, risk }) {
   document.getElementById("results").style.display = "block";
   document.getElementById("title").innerText = ticker;
   document.getElementById("price").innerText = price.toFixed(2);
@@ -181,13 +186,6 @@ function render({ ticker, price, dcf, risk, prices, labels }) {
 
   document.getElementById("verdict").innerText =
     dcf > price ? "Undervalued ✅" : "Overvalued ⚠️";
-
-  if (chart) chart.destroy();
-  chart = new Chart(document.getElementById("chart"), {
-    type:"line",
-    data:{ labels, datasets:[{ data:prices, borderColor:"#38bdf8", pointRadius:0 }] },
-    options:{ plugins:{ legend:{ display:false } } }
-  });
 }
 
 renderWatchlist();

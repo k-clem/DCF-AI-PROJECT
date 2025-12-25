@@ -1,63 +1,159 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
   <title>DCF AI Bot</title>
-</head>
-<body>
-  <h1>DCF AI Bot is Live</h1>
-</body>
-</html>
-
-<html>
-<head>
-  <title>DCF Valuation Tool</title>
-
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-
   <style>
-    body { background:#0f172a; color:white; font-family:Arial; padding:40px }
-    input, button { padding:10px; font-size:16px }
-    .card { background:#1e293b; padding:20px; margin-top:20px; border-radius:10px }
+    body {
+      background: #0f172a;
+      color: #e5e7eb;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 { color: #38bdf8; }
+    input, button {
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 6px;
+      border: none;
+    }
+    input {
+      width: 200px;
+    }
+    button {
+      background: #38bdf8;
+      cursor: pointer;
+    }
+    .card {
+      background: #020617;
+      padding: 15px;
+      border-radius: 10px;
+      margin-top: 20px;
+    }
+    .watchlist-item {
+      cursor: pointer;
+      color: #38bdf8;
+    }
   </style>
 </head>
-
 <body>
-  <h1>DCF Stock Valuation</h1>
 
-  <input id="ticker" placeholder="AAPL" />
-  <button onclick="analyze()">Analyze</button>
+<h1>📊 DCF AI Bot</h1>
 
-  <div id="output"></div>
+<!-- STOCK SEARCH -->
+<div class="card">
+  <h2>🔍 Stock Search</h2>
+  <input id="tickerInput" placeholder="Enter ticker (AAPL)" />
+  <br />
+  <button onclick="analyzeStock()">Analyze</button>
+  <button onclick="addToWatchlist()">⭐ Add to Watchlist</button>
+</div>
+
+<!-- RESULTS -->
+<div class="card" id="results" style="display:none;">
+  <h2>📊 Valuation</h2>
+  <p><b>Ticker:</b> <span id="ticker"></span></p>
+  <p><b>Market Price:</b> $<span id="price"></span></p>
+  <p><b>Intrinsic Value (DCF):</b> $<span id="dcf"></span></p>
+  <p><b>Verdict:</b> <span id="verdict"></span></p>
+</div>
+
+<!-- WATCHLIST -->
+<div class="card">
+  <h2>⭐ Watchlist</h2>
+  <ul id="watchlist"></ul>
+</div>
 
 <script>
-  const firebaseConfig = {
-    apiKey: "PASTE_FROM_FIREBASE",
-    authDomain: "PROJECT.firebaseapp.com",
-    projectId: "PROJECT",
-    appId: "APP_ID"
-  };
+const API = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=";
 
-  firebase.initializeApp(firebaseConfig);
-  const functions = firebase.functions();
+function getWatchlist() {
+  return JSON.parse(localStorage.getItem("watchlist") || "[]");
+}
 
-  async function analyze() {
-    const ticker = document.getElementById("ticker").value;
+function saveWatchlist(list) {
+  localStorage.setItem("watchlist", JSON.stringify(list));
+}
 
-    try {
-      const res = await functions.httpsCallable("analyze")({ ticker });
-      const d = res.data;
+function renderWatchlist() {
+  const list = getWatchlist();
+  const ul = document.getElementById("watchlist");
+  ul.innerHTML = "";
+  list.forEach(ticker => {
+    const li = document.createElement("li");
+    li.className = "watchlist-item";
+    li.innerText = ticker;
+    li.onclick = () => {
+      document.getElementById("tickerInput").value = ticker;
+      analyzeStock();
+    };
+    ul.appendChild(li);
+  });
+}
 
-      document.getElementById("output").innerHTML = `
-        <div class="card">
-          <h3>${d.ticker}</h3>
-          <p>Market Price: $${d.marketPrice}</p>
-          <p>Intrinsic Value: $${d.intrinsicValue}</p>
-        </div>`;
-    } catch (e) {
-      alert(e.message);
-    }
+function addToWatchlist() {
+  const ticker = document.getElementById("tickerInput").value.toUpperCase();
+  if (!ticker) return;
+  const list = getWatchlist();
+  if (!list.includes(ticker)) {
+    list.push(ticker);
+    saveWatchlist(list);
+    renderWatchlist();
   }
+}
+
+async function analyzeStock() {
+  const ticker = document.getElementById("tickerInput").value.toUpperCase();
+  if (!ticker) return;
+
+  const res = await fetch(API + ticker);
+  const data = await res.json();
+  const quote = data.quoteResponse.result[0];
+
+  if (!quote) {
+    alert("Ticker not found");
+    return;
+  }
+
+  const price = quote.regularMarketPrice;
+  const dcfValue = calculateDCF(price);
+
+  document.getElementById("ticker").innerText = ticker;
+  document.getElementById("price").innerText = price.toFixed(2);
+  document.getElementById("dcf").innerText = dcfValue.toFixed(2);
+
+  document.getElementById("verdict").innerText =
+    dcfValue > price ? "Undervalued ✅" : "Overvalued ⚠️";
+
+  document.getElementById("results").style.display = "block";
+}
+
+function calculateDCF(currentPrice) {
+  const discountRate = 0.1;
+  const growthRate = 0.05;
+  const terminalGrowth = 0.02;
+  const years = 10;
+
+  let cashFlow = currentPrice * 0.15; // proxy FCF
+  let totalValue = 0;
+
+  for (let i = 1; i <= years; i++) {
+    cashFlow *= (1 + growthRate);
+    totalValue += cashFlow / Math.pow(1 + discountRate, i);
+  }
+
+  const terminalValue =
+    (cashFlow * (1 + terminalGrowth)) /
+    (discountRate - terminalGrowth);
+
+  totalValue += terminalValue / Math.pow(1 + discountRate, years);
+
+  return totalValue;
+}
+
+renderWatchlist();
 </script>
+
 </body>
 </html>

@@ -1,4 +1,117 @@
 <!DOCTYPE html>
+
+<!-- STOCK SEARCH -->
+<div class="card">
+  <h2>🔍 Stock Search</h2>
+  <input id="tickerInput" placehold
+<!-- RESULTS -->
+<div class="card" id="results" style="display:none;">
+  <h2>📊 Valuation</h2>
+  <p><b>Ticker:</b> <span id="ticker"></span></p>
+  <p><b>Market Price:</b> $<span id="price"></span></p>
+  <p><b>Intrinsic Value (DCF):</b> $<span id="dcf"></span></p>
+  <p><b>Verdict:</b> <span id="verdict"></span></p>
+</div>
+
+<!-- WATCHLIST -->
+<div class="card">
+  <h2>⭐ Watchlist</h2>
+  <ul id="watchlist"></ul>
+</div>
+
+<script>
+const API = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=";
+
+function getWatchlist() {
+  return JSON.parse(localStorage.getItem("watchlist") || "[]");
+}
+
+function saveWatchlist(list) {
+  localStorage.setItem("watchlist", JSON.stringify(list));
+}
+
+function renderWatchlist() {
+  const list = getWatchlist();
+  const ul = document.getElementById("watchlist");
+  ul.innerHTML = "";
+  list.forEach(ticker => {
+    const li = document.createElement("li");
+    li.className = "watchlist-item";
+    li.innerText = ticker;
+    li.onclick = () => {
+      document.getElementById("tickerInput").value = ticker;
+      analyzeStock();
+    };
+    ul.appendChild(li);
+  });
+}
+
+function addToWatchlist() {
+  const ticker = document.getElementById("tickerInput").value.toUpperCase();
+  if (!ticker) return;
+  const list = getWatchlist();
+  if (!list.includes(ticker)) {
+    list.push(ticker);
+    saveWatchlist(list);
+    renderWatchlist();
+  }
+}
+
+async function analyzeStock() {
+  const ticker = document.getElementById("tickerInput").value.toUpperCase();
+  if (!ticker) return;
+
+  const res = await fetch(API + ticker);
+  const data = await res.json();
+  const quote = data.quoteResponse.result[0];
+
+  if (!quote) {
+    alert("Ticker not found");
+    return;
+  }
+
+  const price = quote.regularMarketPrice;
+  const dcfValue = calculateDCF(price);
+
+  document.getElementById("ticker").innerText = ticker;
+  document.getElementById("price").innerText = price.toFixed(2);
+  document.getElementById("dcf").innerText = dcfValue.toFixed(2);
+
+  document.getElementById("verdict").innerText =
+    dcfValue > price ? "Undervalued ✅" : "Overvalued ⚠️";
+
+  document.getElementById("results").style.display = "block";
+}
+
+function calculateDCF(currentPrice) {
+  const discountRate = 0.1;
+  const growthRate = 0.05;
+  const terminalGrowth = 0.02;
+  const years = 10;
+
+  let cashFlow = currentPrice * 0.15; // proxy FCF
+  let totalValue = 0;
+
+  for (let i = 1; i <= years; i++) {
+    cashFlow *= (1 + growthRate);
+    totalValue += cashFlow / Math.pow(1 + discountRate, i);
+  }
+
+  const terminalValue =
+    (cashFlow * (1 + terminalGrowth)) /
+    (discountRate - terminalGrowth);
+
+  totalValue += terminalValue / Math.pow(1 + discountRate, years);
+
+  return totalValue;
+}
+
+renderWatchlist();
+</script>
+
+</body>
+</html>
+
 <html lang="en">
 <head>
   <meta charset="UTF-8" />

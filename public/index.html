@@ -2,91 +2,81 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>DCF AI Bot</title>
+  <title>DCF AI Valuation</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
     body {
-      background: #0f172a;
-      color: #e5e7eb;
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 20px;
+      background:#0f172a;
+      color:#e5e7eb;
+      font-family:Arial, sans-serif;
+      padding:20px;
     }
-    h1 { color: #38bdf8; }
+    h1 { color:#38bdf8; }
     input, button {
-      padding: 10px;
-      margin: 5px 0;
-      border-radius: 6px;
-      border: none;
+      padding:10px;
+      border-radius:6px;
+      border:none;
+      margin-top:5px;
     }
-    input {
-      width: 200px;
-    }
-    button {
-      background: #38bdf8;
-      cursor: pointer;
-    }
+    button { background:#38bdf8; cursor:pointer; }
     .card {
-      background: #020617;
-      padding: 15px;
-      border-radius: 10px;
-      margin-top: 20px;
+      background:#020617;
+      padding:15px;
+      border-radius:10px;
+      margin-top:20px;
     }
-    .watchlist-item {
-      cursor: pointer;
-      color: #38bdf8;
-    }
+    .low { color:#22c55e; }
+    .mid { color:#eab308; }
+    .high { color:#ef4444; }
+    li { cursor:pointer; }
   </style>
 </head>
+
 <body>
 
-<h1>📊 DCF AI Bot</h1>
+<h1>📊 DCF AI Valuation</h1>
 
-<!-- STOCK SEARCH -->
 <div class="card">
-  <h2>🔍 Stock Search</h2>
   <input id="tickerInput" placeholder="Enter ticker (AAPL)" />
-  <br />
-  <button onclick="analyzeStock()">Analyze</button>
+  <br>
+  <button onclick="analyze()">Analyze</button>
   <button onclick="addToWatchlist()">⭐ Add to Watchlist</button>
 </div>
 
-<!-- RESULTS -->
 <div class="card" id="results" style="display:none;">
-  <h2>📊 Valuation</h2>
-  <p><b>Ticker:</b> <span id="ticker"></span></p>
-  <p><b>Market Price:</b> $<span id="price"></span></p>
-  <p><b>Intrinsic Value (DCF):</b> $<span id="dcf"></span></p>
-  <p><b>Verdict:</b> <span id="verdict"></span></p>
+  <h2 id="title"></h2>
+  <p>Market Price: $<span id="price"></span></p>
+  <p>Intrinsic Value (DCF): $<span id="dcf"></span></p>
+  <p>AI Valuation Risk: <span id="risk"></span></p>
+  <p>Verdict: <span id="verdict"></span></p>
+  <canvas id="chart" height="120"></canvas>
 </div>
 
-<!-- WATCHLIST -->
 <div class="card">
   <h2>⭐ Watchlist</h2>
   <ul id="watchlist"></ul>
 </div>
 
 <script>
-const API = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=";
+const cache = {};
+let chart;
 
 function getWatchlist() {
   return JSON.parse(localStorage.getItem("watchlist") || "[]");
 }
-
 function saveWatchlist(list) {
   localStorage.setItem("watchlist", JSON.stringify(list));
 }
-
 function renderWatchlist() {
-  const list = getWatchlist();
   const ul = document.getElementById("watchlist");
   ul.innerHTML = "";
-  list.forEach(ticker => {
+  getWatchlist().forEach(item => {
     const li = document.createElement("li");
-    li.className = "watchlist-item";
-    li.innerText = ticker;
+    li.innerHTML = `${item.ticker} — <b class="${item.riskClass}">${item.riskScore ?? "?"}</b>`;
     li.onclick = () => {
-      document.getElementById("tickerInput").value = ticker;
-      analyzeStock();
+      document.getElementById("tickerInput").value = item.ticker;
+      analyze();
     };
     ul.appendChild(li);
   });
@@ -96,132 +86,12 @@ function addToWatchlist() {
   const ticker = document.getElementById("tickerInput").value.toUpperCase();
   if (!ticker) return;
   const list = getWatchlist();
-  if (!list.includes(ticker)) {
-    list.push(ticker);
+  if (!list.find(x => x.ticker === ticker)) {
+    list.push({ ticker });
     saveWatchlist(list);
     renderWatchlist();
   }
 }
-
-async function analyzeStock() {
-  const ticker = document.getElementById("tickerInput").value.toUpperCase();
-  if (!ticker) return;
-
-  const res = await fetch(API + ticker);
-  const data = await res.json();
-  const quote = data.quoteResponse.result[0];
-
-  if (!quote) {
-    alert("Ticker not found");
-    return;
-  }
-
-  const price = quote.regularMarketPrice;
-  const dcfValue = calculateDCF(price);
-
-  document.getElementById("ticker").innerText = ticker;
-  document.getElementById("price").innerText = price.toFixed(2);
-  document.getElementById("dcf").innerText = dcfValue.toFixed(2);
-
-  document.getElementById("verdict").innerText =
-    dcfValue > price ? "Undervalued ✅" : "Overvalued ⚠️";
-
-  document.getElementById("results").style.display = "block";
-}
-
-function calculateDCF(currentPrice) {
-  const discountRate = 0.1;
-  const growthRate = 0.05;
-  const terminalGrowth = 0.02;
-  const years = 10;
-
-  let cashFlow = currentPrice * 0.15; // proxy FCF
-  let totalValue = 0;
-
-  for (let i = 1; i <= years; i++) {
-    cashFlow *= (1 + growthRate);
-    totalValue += cashFlow / Math.pow(1 + discountRate, i);
-  }
-
-  const terminalValue =
-    (cashFlow * (1 + terminalGrowth)) /
-    (discountRate - terminalGrowth);
-
-  totalValue += terminalValue / Math.pow(1 + discountRate, years);
-
-  return totalValue;
-}
-
-renderWatchlist();
-</script>
-
-</body>
-</html>
-
-
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>DCF AI Bot</title>
-
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <style>
-    body {
-      background: #0f172a;
-      color: #e5e7eb;
-      font-family: Arial, sans-serif;
-      padding: 20px;
-    }
-    h1 { color: #38bdf8; }
-    input, button {
-      padding: 10px;
-      border-radius: 6px;
-      border: none;
-      margin-top: 5px;
-    }
-    button {
-      background: #38bdf8;
-      cursor: pointer;
-    }
-    .card {
-      background: #020617;
-      padding: 15px;
-      border-radius: 10px;
-      margin-top: 20px;
-    }
-    .risk-low { color: #22c55e; }
-    .risk-mid { color: #eab308; }
-    .risk-high { color: #ef4444; }
-    canvas {
-      margin-top: 15px;
-    }
-  </style>
-</head>
-
-<body>
-
-<h1>📊 DCF AI Bot</h1>
-
-<div class="card">
-  <input id="tickerInput" placeholder="Ticker (AAPL)" />
-  <br>
-  <button onclick="analyze()">Analyze</button>
-</div>
-
-<div class="card" id="output" style="display:none;">
-  <h2 id="title"></h2>
-  <p>Market Price: $<span id="price"></span></p>
-  <p>Intrinsic Value (DCF): $<span id="dcf"></span></p>
-  <p>Risk Score: <span id="risk"></span></p>
-  <p>Verdict: <span id="verdict"></span></p>
-  <canvas id="chart" height="120"></canvas>
-</div>
-
-<script>
-const cache = {};
-let chart;
 
 async function analyze() {
   const ticker = document.getElementById("tickerInput").value.toUpperCase();
@@ -232,27 +102,32 @@ async function analyze() {
     return;
   }
 
-  const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=6mo&interval=1d`);
+  const res = await fetch(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?range=6mo&interval=1d`
+  );
   const json = await res.json();
-  const result = json.chart.result[0];
+  const r = json.chart.result?.[0];
+  if (!r) return alert("Ticker not found");
 
-  const prices = result.indicators.quote[0].close.filter(Boolean);
-  const timestamps = result.timestamp.map(t => new Date(t * 1000).toLocaleDateString());
+  const prices = r.indicators.quote[0].close.filter(Boolean);
+  const labels = r.timestamp.map(t => new Date(t * 1000).toLocaleDateString());
+  const price = prices.at(-1);
 
-  const price = prices[prices.length - 1];
-  const dcf = calculateDCF(price);
-  const risk = calculateRisk(prices, price, dcf);
+  const dcf = improvedDCF(price);
+  const risk = aiRisk(prices, price, dcf);
 
-  const payload = { ticker, price, dcf, risk, prices, timestamps };
+  const payload = { ticker, price, dcf, risk, prices, labels };
   cache[ticker] = payload;
+  updateWatchlistScore(ticker, risk);
   render(payload);
 }
 
-function calculateDCF(price) {
+function improvedDCF(price) {
   const discount = 0.1;
-  const growth = 0.05;
+  const growth = 0.06;
   const terminal = 0.02;
-  let fcf = price * 0.15;
+
+  let fcf = price * 0.18; // normalized FCF proxy
   let value = 0;
 
   for (let i = 1; i <= 10; i++) {
@@ -263,63 +138,59 @@ function calculateDCF(price) {
   const terminalValue = (fcf * (1 + terminal)) / (discount - terminal);
   value += terminalValue / Math.pow(1 + discount, 10);
 
-  return value;
+  return Math.max(value, 0);
 }
 
-function calculateRisk(prices, price, dcf) {
+function aiRisk(prices, price, dcf) {
   const returns = prices.slice(1).map((p, i) => (p - prices[i]) / prices[i]);
   const volatility = std(returns) * 100;
-
-  const ma50 = avg(prices.slice(-50));
-  const trendRisk = price < ma50 ? 25 : 5;
-
   const valuationGap = Math.abs(dcf - price) / price * 100;
+  const trendPenalty = price < avg(prices.slice(-50)) ? 20 : 5;
 
-  let risk = volatility + trendRisk + valuationGap;
-  return Math.min(100, Math.round(risk));
+  const score = Math.min(100, Math.round(volatility + valuationGap + trendPenalty));
+  return score;
 }
 
-function avg(arr) {
-  return arr.reduce((a, b) => a + b, 0) / arr.length;
+function updateWatchlistScore(ticker, score) {
+  const list = getWatchlist();
+  list.forEach(item => {
+    if (item.ticker === ticker) {
+      item.riskScore = score;
+      item.riskClass = score < 30 ? "low" : score < 60 ? "mid" : "high";
+    }
+  });
+  saveWatchlist(list);
+  renderWatchlist();
 }
 
-function std(arr) {
-  const m = avg(arr);
-  return Math.sqrt(avg(arr.map(x => (x - m) ** 2)));
+function avg(a) { return a.reduce((x,y)=>x+y,0)/a.length; }
+function std(a) {
+  const m = avg(a);
+  return Math.sqrt(avg(a.map(x => (x-m)**2)));
 }
 
-function render({ ticker, price, dcf, risk, prices, timestamps }) {
-  document.getElementById("output").style.display = "block";
+function render({ ticker, price, dcf, risk, prices, labels }) {
+  document.getElementById("results").style.display = "block";
   document.getElementById("title").innerText = ticker;
   document.getElementById("price").innerText = price.toFixed(2);
   document.getElementById("dcf").innerText = dcf.toFixed(2);
 
-  const riskEl = document.getElementById("risk");
-  riskEl.innerText = risk;
-  riskEl.className = risk < 30 ? "risk-low" : risk < 60 ? "risk-mid" : "risk-high";
+  const r = document.getElementById("risk");
+  r.innerText = risk;
+  r.className = risk < 30 ? "low" : risk < 60 ? "mid" : "high";
 
   document.getElementById("verdict").innerText =
     dcf > price ? "Undervalued ✅" : "Overvalued ⚠️";
 
   if (chart) chart.destroy();
   chart = new Chart(document.getElementById("chart"), {
-    type: "line",
-    data: {
-      labels: timestamps,
-      datasets: [{
-        label: "Price",
-        data: prices,
-        borderWidth: 2,
-        borderColor: "#38bdf8",
-        pointRadius: 0
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false } }
-    }
+    type:"line",
+    data:{ labels, datasets:[{ data:prices, borderColor:"#38bdf8", pointRadius:0 }] },
+    options:{ plugins:{ legend:{ display:false } } }
   });
 }
+
+renderWatchlist();
 </script>
 
 </body>

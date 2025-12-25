@@ -1,9 +1,55 @@
 <!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>DCF AI Bot</title>
+  <style>
+    body {
+      background: #0f172a;
+      color: #e5e7eb;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 { color: #38bdf8; }
+    input, button {
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 6px;
+      border: none;
+    }
+    input {
+      width: 200px;
+    }
+    button {
+      background: #38bdf8;
+      cursor: pointer;
+    }
+    .card {
+      background: #020617;
+      padding: 15px;
+      border-radius: 10px;
+      margin-top: 20px;
+    }
+    .watchlist-item {
+      cursor: pointer;
+      color: #38bdf8;
+    }
+  </style>
+</head>
+<body>
+
+<h1>📊 DCF AI Bot</h1>
 
 <!-- STOCK SEARCH -->
 <div class="card">
   <h2>🔍 Stock Search</h2>
-  <input id="tickerInput" placehold
+  <input id="tickerInput" placeholder="Enter ticker (AAPL)" />
+  <br />
+  <button onclick="analyzeStock()">Analyze</button>
+  <button onclick="addToWatchlist()">⭐ Add to Watchlist</button>
+</div>
+
 <!-- RESULTS -->
 <div class="card" id="results" style="display:none;">
   <h2>📊 Valuation</h2>
@@ -111,6 +157,7 @@ renderWatchlist();
 
 </body>
 </html>
+
 
 <html lang="en">
 <head>

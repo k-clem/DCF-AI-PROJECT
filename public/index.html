@@ -2,215 +2,210 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>DCF AI Valuation</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <title>DCF AI Valuation Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <style>
     body {
-      background:#0f172a;
-      color:#e5e7eb;
-      font-family:Arial, sans-serif;
-      padding:20px;
+      font-family: Arial, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      margin: 0;
+      padding: 20px;
     }
-    h1 { color:#38bdf8; }
-    input, button {
-      padding:10px;
-      border-radius:6px;
-      border:none;
-      margin-top:5px;
+
+    h1 {
+      text-align: center;
+      margin-bottom: 30px;
     }
-    button { background:#38bdf8; cursor:pointer; }
+
     .card {
-      background:#020617;
-      padding:15px;
-      border-radius:10px;
-      margin-top:20px;
+      background: #111827;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
     }
-    .low { color:#22c55e; }
-    .mid { color:#eab308; }
-    .high { color:#ef4444; }
-    li { cursor:pointer; }
+
+    input, button {
+      padding: 10px;
+      border-radius: 6px;
+      border: none;
+      font-size: 16px;
+    }
+
+    input {
+      width: 200px;
+      margin-right: 10px;
+    }
+
+    button {
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+    }
+
+    button.secondary {
+      background: #374151;
+      margin-left: 10px;
+    }
+
+    .status {
+      margin-top: 10px;
+      font-style: italic;
+      color: #9ca3af;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #374151;
+      text-align: left;
+    }
+
+    th {
+      color: #9ca3af;
+      font-size: 14px;
+    }
+
+    .low-risk {
+      color: #22c55e;
+    }
+
+    .mid-risk {
+      color: #facc15;
+    }
+
+    .high-risk {
+      color: #ef4444;
+    }
   </style>
 </head>
 
 <body>
 
-<h1>📊 DCF AI Valuation</h1>
+<h1>📊 DCF AI Stock Valuation</h1>
 
 <div class="card">
-  <input id="tickerInput" placeholder="Enter ticker (AAPL)" />
-  <br>
-  <button onclick="analyze()">Analyze</button>
-  <button onclick="addToWatchlist()">⭐ Add to Watchlist</button>
-</div>
+  <h2>Analyze a Stock</h2>
+  <input id="tickerInput" placeholder="Ticker (AAPL)" />
+  <button onclick="analyzeStock()">Analyze</button>
+  <button class="secondary" onclick="saveToWatchlist()">Add to Watchlist</button>
 
-<div class="card" id="results" style="display:none;">
-  <h2 id="title"></h2>
-  <p>Market Price: $<span id="price"></span></p>
-  <p>Intrinsic Value (DCF): $<span id="dcf"></span></p>
-  <p>AI Valuation Risk: <span id="risk"></span></p>
-  <p>Verdict: <span id="verdict"></span></p>
-  <canvas id="chart" height="120"></canvas>
+  <div class="status" id="status"></div>
+
+  <div id="analysisResult"></div>
 </div>
 
 <div class="card">
   <h2>⭐ Watchlist</h2>
-  <ul id="watchlist"></ul>
+  <table>
+    <thead>
+      <tr>
+        <th>Ticker</th>
+        <th>DCF Value ($B)</th>
+        <th>Risk Score</th>
+        <th>Years Used</th>
+      </tr>
+    </thead>
+    <tbody id="watchlistTable"></tbody>
+  </table>
 </div>
 
-  
 <script>
-function setStatus(message) {
-  const card = document.getElementById("statusCard");
-  const text = document.getElementById("statusText");
-  card.style.display = "block";
-  text.innerText = message;
-}
+  const BACKEND_URL = "https://dcf-backend-yojp.onrender.com";
+  let latestAnalysis = null;
 
-function clearStatus() {
-  document.getElementById("statusText").innerText = "Complete ✅";
-}
+  function getRiskClass(score) {
+    if (score <= 10) return "low-risk";
+    if (score <= 30) return "mid-risk";
+    return "high-risk";
+  }
 
-let chart;
-const cache = {};
+  async function analyzeStock() {
+    const ticker = document.getElementById("tickerInput").value.trim().toUpperCase();
+    const statusEl = document.getElementById("status");
+    const resultEl = document.getElementById("analysisResult");
 
-function getWatchlist() {
-  return JSON.parse(localStorage.getItem("watchlist") || "[]");
-}
-function saveWatchlist(list) {
-  localStorage.setItem("watchlist", JSON.stringify(list));
-}
-function renderWatchlist() {
-  const ul = document.getElementById("watchlist");
-  ul.innerHTML = "";
-  getWatchlist().forEach(item => {
-    const li = document.createElement("li");
-    li.innerHTML = `${item.ticker} — <b class="${item.riskClass || ""}">
-      ${item.riskScore ?? "Not analyzed"}
-    </b>`;
-    li.onclick = () => {
-      document.getElementById("tickerInput").value = item.ticker;
-      analyze();
-    };
-    ul.appendChild(li);
-  });
-}
+    if (!ticker) return;
 
-function addToWatchlist() {
-  const ticker = document.getElementById("tickerInput").value.toUpperCase();
-  if (!ticker) return;
-  const list = getWatchlist();
-  if (!list.find(x => x.ticker === ticker)) {
-    list.push({ ticker });
-    saveWatchlist(list);
+    statusEl.textContent = "Analyzing stock…";
+    resultEl.innerHTML = "";
+    latestAnalysis = null;
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/analyze?ticker=${ticker}`);
+      const data = await res.json();
+
+      if (data.status === "queued") {
+        statusEl.textContent = "Analysis in progress. Try again shortly.";
+        return;
+      }
+
+      if (data.status === "complete") {
+        statusEl.textContent = "Analysis complete";
+
+        latestAnalysis = data;
+
+        resultEl.innerHTML = `
+          <p><strong>${data.ticker}</strong></p>
+          <p>DCF Value: <strong>$${data.dcf_value_billion}B</strong></p>
+          <p>AI Risk Score: 
+            <strong class="${getRiskClass(data.risk_score)}">
+              ${data.risk_score}/100
+            </strong>
+          </p>
+          <p>Years Used: ${data.years_used}</p>
+        `;
+      } else {
+        statusEl.textContent = "Unexpected response.";
+      }
+
+    } catch (err) {
+      statusEl.textContent = "Error contacting backend.";
+    }
+  }
+
+  function saveToWatchlist() {
+    if (!latestAnalysis) return;
+
+    const watchlist = JSON.parse(localStorage.getItem("watchlist")) || [];
+
+    const exists = watchlist.some(item => item.ticker === latestAnalysis.ticker);
+    if (exists) return;
+
+    watchlist.push(latestAnalysis);
+    localStorage.setItem("watchlist", JSON.stringify(watchlist));
     renderWatchlist();
   }
-}
 
-async function analyze() {
-  const ticker = document.getElementById("tickerInput").value.toUpperCase();
-  if (!ticker) return;
+  function renderWatchlist() {
+    const table = document.getElementById("watchlistTable");
+    table.innerHTML = "";
 
-  setStatus("Fetching market data… (a few seconds)");
-  
-  if (cache[ticker]) return render(cache[ticker]);
+    const watchlist = JSON.parse(localStorage.getItem("watchlist")) || [];
 
-  const url = `https://stooq.pl/q/d/l/?s=${ticker.toLowerCase()}.us&i=d`;
-  const res = await fetch(url);
-  const text = await res.text();
+    watchlist.forEach(item => {
+      const row = document.createElement("tr");
 
-  setStatus("Running DCF valuation model…");
+      row.innerHTML = `
+        <td><strong>${item.ticker}</strong></td>
+        <td>$${item.dcf_value_billion}B</td>
+        <td class="${getRiskClass(item.risk_score)}">
+          ${item.risk_score}/100
+        </td>
+        <td>${item.years_used}</td>
+      `;
 
-  if (!text.includes(",")) {
-    alert("Data unavailable for this ticker.");
-    return;
+      table.appendChild(row);
+    });
   }
 
-  const rows = text.trim().split("\n").slice(1);
-  const prices = rows.map(r => parseFloat(r.split(",")[4])).filter(Boolean);
-
-  const price = prices.at(-1);
-
-  setStatus("Calculating AI valuation risk…");
-  
-  const dcf = deepDCF(prices);
-  const risk = aiRisk(prices, price, dcf);
-
-  const payload = { ticker, price, dcf, risk, prices };
-  cache[ticker] = payload;
-  updateWatchlistScore(ticker, risk);
-  render(payload);
-}
-  <div class="card" id="statusCard" style="display:none;">
-  <h3>⏳ Analysis Status</h3>
-  <p id="statusText">Starting…</p>
-</div>
-
-function deepDCF(prices) {
-  const years = 10;
-  const discount = 0.1;
-  const terminal = 0.02;
-
-  const returns = prices.slice(1).map((p, i) => (p - prices[i]) / prices[i]);
-  const avgReturn = avg(returns);
-  const growth = Math.min(Math.max(avgReturn, 0.03), 0.08);
-
-  let fcf = prices.at(-1) * 0.2;
-  let value = 0;
-
-  for (let i = 1; i <= years; i++) {
-    fcf *= (1 + growth);
-    value += fcf / Math.pow(1 + discount, i);
-  }
-
-  const terminalValue = (fcf * (1 + terminal)) / (discount - terminal);
-  value += terminalValue / Math.pow(1 + discount, years);
-
-  return value * 0.85; // margin of safety
-}
-
-function aiRisk(prices, price, dcf) {
-  const returns = prices.slice(1).map((p, i) => (p - prices[i]) / prices[i]);
-  const volatility = std(returns) * 100;
-  const valuationGap = Math.abs(dcf - price) / price * 100;
-  const drawdown = (Math.max(...prices) - price) / Math.max(...prices) * 100;
-
-  return Math.min(100, Math.round(volatility + valuationGap + drawdown));
-}
-
-function updateWatchlistScore(ticker, score) {
-  const list = getWatchlist();
-  list.forEach(item => {
-    if (item.ticker === ticker) {
-      item.riskScore = score;
-      item.riskClass = score < 30 ? "low" : score < 60 ? "mid" : "high";
-    }
-  });
-  saveWatchlist(list);
   renderWatchlist();
-}
-
-function avg(a) { return a.reduce((x,y)=>x+y,0)/a.length; }
-function std(a) {
-  const m = avg(a);
-  return Math.sqrt(avg(a.map(x => (x-m)**2)));
-}
-
-function render({ ticker, price, dcf, risk }) {
-  document.getElementById("results").style.display = "block";
-  document.getElementById("title").innerText = ticker;
-  document.getElementById("price").innerText = price.toFixed(2);
-  document.getElementById("dcf").innerText = dcf.toFixed(2);
-
-  const r = document.getElementById("risk");
-  r.innerText = risk;
-  r.className = risk < 30 ? "low" : risk < 60 ? "mid" : "high";
-
-  document.getElementById("verdict").innerText =
-    dcf > price ? "Undervalued ✅" : "Overvalued ⚠️";
-}
-
-renderWatchlist();
 </script>
 
 </body>

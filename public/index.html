@@ -88,21 +88,56 @@
 
 <body>
 
-<h1>📊 DCF AI Stock Valuation</h1>
+<h1 style="text-align:center;">📊 DCF AI Stock Valuation</h1>
 
-<div class="card">
-  <h2>Analyze a Stock</h2>
-  <input id="tickerInput" placeholder="Ticker (AAPL)" />
-  <button onclick="analyzeStock()">Analyze</button>
-  <button class="secondary" onclick="saveToWatchlist()">Add to Watchlist</button>
+<!-- TOP ROW -->
+<div style="display:flex; gap:20px; align-items:flex-start;">
 
-  <div class="status" id="status"></div>
+  <!-- ANALYZE PANEL -->
+  <div class="card" style="flex:1;">
+    <h2>Analyze a Stock</h2>
 
-  <div id="analysisResult"></div>
+    <input id="tickerInput" placeholder="Ticker (AAPL)" />
+    <button onclick="analyzeStock()">Analyze</button>
+    <button class="secondary" onclick="saveToWatchlist()">Add to Watchlist</button>
+
+    <div class="status" id="status"></div>
+    <div id="analysisResult"></div>
+  </div>
+
+  <!-- EXPLANATION PANEL -->
+  <div class="card" style="flex:1;">
+    <h2>📈 How to Read This</h2>
+
+    <p><strong>DCF Value</strong> estimates what a company is worth today based on future cash flows.</p>
+
+    <ul>
+      <li><strong>DCF > Market Cap</strong> → Potentially undervalued</li>
+      <li><strong>DCF ≈ Market Cap</strong> → Fairly valued</li>
+      <li><strong>DCF < Market Cap</strong> → Potentially overvalued</li>
+    </ul>
+
+    <hr />
+
+    <p><strong>AI Risk Score (0–100)</strong></p>
+    <ul>
+      <li class="low-risk"><strong>0–10</strong> → Low risk, stable cash flows</li>
+      <li class="mid-risk"><strong>11–30</strong> → Moderate risk</li>
+      <li class="high-risk"><strong>31+</strong> → High volatility / uncertainty</li>
+    </ul>
+
+    <p style="font-size:14px;color:#9ca3af;">
+      Risk score considers cash-flow volatility and consistency.  
+      It is a decision-support metric, not financial advice.
+    </p>
+  </div>
+
 </div>
 
+<!-- WATCHLIST -->
 <div class="card">
   <h2>⭐ Watchlist</h2>
+
   <table>
     <thead>
       <tr>
@@ -110,6 +145,7 @@
         <th>DCF Value ($B)</th>
         <th>Risk Score</th>
         <th>Years Used</th>
+        <th></th>
       </tr>
     </thead>
     <tbody id="watchlistTable"></tbody>
@@ -141,44 +177,44 @@
       const res = await fetch(`${BACKEND_URL}/analyze?ticker=${ticker}`);
       const data = await res.json();
 
-      if (data.status === "queued") {
-        statusEl.textContent = "Analysis in progress. Try again shortly.";
+      if (data.status !== "complete") {
+        statusEl.textContent = "Analysis failed or incomplete.";
         return;
       }
 
-      if (data.status === "complete") {
-        statusEl.textContent = "Analysis complete";
+      latestAnalysis = data;
+      statusEl.textContent = "Analysis complete";
 
-        latestAnalysis = data;
+      resultEl.innerHTML = `
+        <p><strong>${data.ticker}</strong></p>
+        <p>DCF Value: <strong>$${data.dcf_value_billion}B</strong></p>
+        <p>AI Risk Score:
+          <strong class="${getRiskClass(data.risk_score)}">
+            ${data.risk_score}/100
+          </strong>
+        </p>
+        <p>Years Used: ${data.years_used}</p>
+      `;
 
-        resultEl.innerHTML = `
-          <p><strong>${data.ticker}</strong></p>
-          <p>DCF Value: <strong>$${data.dcf_value_billion}B</strong></p>
-          <p>AI Risk Score: 
-            <strong class="${getRiskClass(data.risk_score)}">
-              ${data.risk_score}/100
-            </strong>
-          </p>
-          <p>Years Used: ${data.years_used}</p>
-        `;
-      } else {
-        statusEl.textContent = "Unexpected response.";
-      }
-
-    } catch (err) {
-      statusEl.textContent = "Error contacting backend.";
+    } catch {
+      statusEl.textContent = "Backend error.";
     }
   }
 
   function saveToWatchlist() {
-    if (!latestAnalysis) return;
+    if (!latestAnalysis || !latestAnalysis.ticker) return;
 
     const watchlist = JSON.parse(localStorage.getItem("watchlist")) || [];
-
-    const exists = watchlist.some(item => item.ticker === latestAnalysis.ticker);
-    if (exists) return;
+    if (watchlist.some(s => s.ticker === latestAnalysis.ticker)) return;
 
     watchlist.push(latestAnalysis);
+    localStorage.setItem("watchlist", JSON.stringify(watchlist));
+    renderWatchlist();
+  }
+
+  function removeFromWatchlist(ticker) {
+    let watchlist = JSON.parse(localStorage.getItem("watchlist")) || [];
+    watchlist = watchlist.filter(item => item.ticker !== ticker);
     localStorage.setItem("watchlist", JSON.stringify(watchlist));
     renderWatchlist();
   }
@@ -190,8 +226,9 @@
     const watchlist = JSON.parse(localStorage.getItem("watchlist")) || [];
 
     watchlist.forEach(item => {
-      const row = document.createElement("tr");
+      if (!item.ticker) return;
 
+      const row = document.createElement("tr");
       row.innerHTML = `
         <td><strong>${item.ticker}</strong></td>
         <td>$${item.dcf_value_billion}B</td>
@@ -199,8 +236,10 @@
           ${item.risk_score}/100
         </td>
         <td>${item.years_used}</td>
+        <td>
+          <button class="secondary" onclick="removeFromWatchlist('${item.ticker}')">✕</button>
+        </td>
       `;
-
       table.appendChild(row);
     });
   }
@@ -209,4 +248,5 @@
 </script>
 
 </body>
+
 </html>
